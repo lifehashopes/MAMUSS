@@ -1,0 +1,168 @@
+---
+title: "Creatign reference mutation profiles for each variant"
+author: "Shelesh Agrawal"
+---
+
+```{r}
+timestamp()
+```
+
+#Importing the packages
+```{r}
+library("dplyr")
+library("patchwork")
+library("permute")
+library("stringi")
+library("ggplot2")
+library("plyr")
+library("knitr")
+library("RColorBrewer")
+library("reshape2")
+library("gridExtra")
+library("extrafont")
+library("scales")
+library("data.table")
+library("ggpubr")
+library("tidyverse")
+library("plotrix")
+library("cowplot")
+library("tidyverse")
+library("lubridate")
+library("deSolve")
+library("viridis") 
+library("Interpol.T")
+library("lubridate") 
+library("ggExtra") 
+library("tidyr") 
+library("ggthemes")
+library("hablar")
+library("readxl")
+```
+
+
+
+#Preparing the Reference mutation profiles for each variant (based on the variant surveillance database downloaded from GISAID)
+
+```{r}
+gis=read_tsv(file=".../variant_surveillance.tsv")# loading the variant surveillance file
+  
+colnames(gis)
+
+colnames(gis)[colnames(gis) == c("Submission date")]=c("DATE")
+colnames(gis)[colnames(gis) == c("Pango lineage")]=c("PANGO")
+colnames(gis)[colnames(gis) == c("AA Substitutions")]=c("AA")
+colnames(gis)[colnames(gis) == c("GC-Content")]=c("GC")
+colnames(gis)[colnames(gis) == c("Collection date")]=c("cDATE")
+colnames(gis)[colnames(gis) == c("Is complete?")]=c("Is_complete")
+colnames(gis)[colnames(gis) == c("Is high coverage?")]=c("Is_high_coverage")
+
+colnames(gis)
+
+unlist(unique(gis$Host))
+
+unlist(unique(gis$Is_high_coverage))
+
+unlist(unique(gis$Is_complete))
+
+sapply(gis, class)
+
+gis_fil <- gis %>%
+  filter(Is_complete == "TRUE") %>%
+  filter(Is_high_coverage == "TRUE") %>%
+filter(Host == "Human") # Retaining only complete sequences mutation profiles obtained from clinical samples
+
+
+gis$PANGO=as.character(gis$PANGO)
+
+pangolist=as.data.frame(unlist(unique(gis$PANGO)))# count total number of the varianst ever reported in the GISAID. 
+#Also tell the most dominant variant.
+length(unique(gis$PANGO))
+
+pangocount=gis%>% group_by(PANGO) %>% dplyr::summarise(count=n())
+
+sapply(gis, class)
+
+gis$monthyr <- format(gis$DATE, "%Y/%m")
+
+gis$Week <- format(gis$DATE, "%W")
+
+gis$Yr_wk <- format(gis$DATE, "%Y_%W")
+
+
+
+pangocount=gis%>% group_by(PANGO,monthyr) %>% dplyr::summarise(count=n())
+
+sapply(gis_fil, class)
+gis_fil$DATE=as.character(gis_fil$DATE)
+gis_fil$DATE=as.Date(gis_fil$DATE)
+
+gis_fil$PANGO=as.character(gis_fil$PANGO)
+
+```
+
+#Preparing reference mutation profile for each target variant as a tab seperated file 
+#filtering each target lineage (for example)
+
+```{r}
+gis_fill_lineage_01=gis_fill[gis_fill$PANGO %in% c( "BA.5"),]
+
+gis_fil_loc=gis_fill_lineage_01 %>%
+                filter(DATE > "2022-01-01" & DATE <"2022-12-12") # change accordingly, if specific timeframe is required, otherwise skip this step
+
+#extracting the mutation profiles submitted with every sequence for each specific variant. 
+sp_df=gis_fil_loc[,c(4,6)]
+
+head(sp_df)
+nrow(sp_df)
+
+
+sp_df_2=as.data.frame(cSplit(sp_df, "AA", sep=")"))
+sp_df_2=as.data.frame(cSplit(sp_df_2, "AA_1", sep="("))
+sp_df_2=as.data.frame(cSplit(sp_df_2, "AA_1_2", sep=","))
+colnames(sp_df_2)
+ncol(sp_df_2)
+
+colnames(sp_df_2) <- gsub("\\_0", "_", tolower(names(sp_df_2)))
+
+sp_df_2=data.table(sp_df_2)
+
+colnames(sp_df_2)
+
+colnames(sp_df_2) <- gsub("\\_0", "_", tolower(names(sp_df_2)))
+
+colA = paste("aa_1_2", 01:1800, sep = "_")#This number has to be changed according to the column numbers found by ncol(sp_df_2) in line 123
+colA
+
+gis_fil_f_voc_eur_melt = melt(sp_df_2, measure = list(colA), value.name = c("AA"))
+
+colnames(gis_fil_f_voc_eur_melt)
+head(gis_fil_f_voc_eur_melt)
+
+
+gis_fil_f_voc_eur_melt_count=gis_fil_f_voc_eur_melt%>% 
+  group_by(pango,AA) %>% 
+  dplyr::summarise(count=n())
+
+head(gis_fil_f_voc_eur_melt_count)
+
+gis_fil_f_voc_eur_melt_count=gis_fil_f_voc_eur_melt_count%>%
+    filter(!is.na(AA)) 
+
+gis_fil_f_voc_eur_melt_count=as.data.frame(cSplit(gis_fil_f_voc_eur_melt_count, "AA", sep="_"))
+
+
+pango_BA5_glob=gis_fil_f_voc_eur_melt_count[,c(1,2,4)]
+
+pango_BA5_glob=pango_BA5_glob%>%
+  mutate(count_log=log10(count))
+pango_BA5_glob_t50=pango_BA5_glob %>%
+  top_n(50,count_log) # Important step, only retain top 50 mutations as reference muttaion profile for each variant.
+
+colnames(pango_BA5_glob_t50)[3] ="AA"
+
+
+write.table(pango_BA5_glob_t50,"pango_BA5_glob_t50.tsv",sep = ";",dec = ".")
+
+
+```
+
