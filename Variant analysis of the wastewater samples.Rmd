@@ -1,0 +1,144 @@
+---
+title: "variant analysis of wastewater samples, using the reference mutation profile created from GISAID variant surveillacne database"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+
+
+```{r}
+timestamp()
+```
+#Import reference mutation profile
+```{r}
+def_variants=read_tsv(file = "~/defining mutation profile.tsv")
+
+head(def_variants)
+
+```
+
+#Import individual SNPeff outputs
+```{r}
+SnpEff_01=read_tsv(file = "~/Sample01.tsv")
+SnpEff_02=read_tsv(file = "~/Sample01.tsv")
+SnpEff_03=read_tsv(file = "~/Sample01.tsv")
+and so on.... for n samples
+
+global_DF_01=rbind(SnpEff_01,
+                   SnpEff_02,
+                   SnpEff_03)
+
+
+
+```
+
+
+
+#merging mutations defining dataframe with the all samples merged dataframe
+
+```{r}
+
+head(global_DF_01)# This is a comprehensive file which include SnpEff output of all the samples.
+
+df_50_1=merge(x = global_DF_01,y =def_variants,by.x = "AA",by.y = "AA",all.x = TRUE)
+
+
+df_50_1_sum=df_50_1%>% group_by(ID,pango) %>% dplyr::summarise(occ_sum=sum(occ))
+
+
+```
+
+```{r}
+df_50_1_count=df_50_1 %>% group_by(Location,date,lineage) %>% dplyr::summarise(count=n())
+
+df_50_1_count_f=df_50_1_count[(!is.na(df_50_1_count$lineage)),]
+
+
+```
+
+
+```{r}
+colnames(df_50_1)
+head(df_50_1)
+
+df_50_1=df_50_1%>% mutate(ID=paste(df_50_1$SampleID,"_",df_50_1$Date,"_",df_50_1$pango))
+
+   colnames(df_50_1)
+   head(df_50_1)
+   
+   sapply(df_50_1, class)
+   
+df_50_1_f=df_50_1[(!is.na(df_50_1$pango)),]
+
+
+
+df_50_1_count=df_50_1_f%>%group_by(ID)%>%
+    dplyr::summarise(count=n())
+
+
+
+
+df_50_1_count_at5=df_50_1_count%>%filter(count>25)# This step helps to retain variants found in the wastewater sample with at least 25 mutations assocaited with each variant.
+
+
+
+
+df_50_2=merge(x = df_50_1_count_at5,y = df_50_1_f,by.x = "ID",by.y = "ID")
+
+colnames(df_50_2)
+
+df_50_2=df_50_2%>%
+group_by(SampleID) %>% 
+    dplyr::mutate(occ_per=occ/sum(occ)*100)
+
+
+
+df_50_2$pango=as.character(df_50_2$pango)
+
+unlist(unique(df_50_2$pango))
+
+colnames(df_50_2)
+
+
+df_50_2=df_50_2 %>% dplyr::mutate(occ=AF*DP) %>% group_by(SampleID,pango) %>% dplyr::summarise(occ_sum=sum(occ)) # for calculating the occurence of each variant found in the wastewater sample data.
+
+
+
+
+
+```
+
+```{r}
+ggplot(df_50_2,x = as.factor(pango), y = AA)+
+  geom_tile(aes(x = as.factor(pango), y = AA),fill="green",colour="white")+
+ facet_grid(.~SampleID,scales = "free")+
+      theme_foundation() +
+  theme(axis.text.x = element_text(angle = 90,vjust=0.5,hjust=0.9,size=12,colour="black"),
+        axis.text.y = element_text(angle = 0,vjust=0.5,hjust=1,size=12,colour="black"),
+        axis.title.x= element_text(angle = 0,vjust=0.5,hjust=0.5,size=12,colour="black"),
+        panel.grid.major.x = element_line(colour="grey37",linetype = 3),
+        panel.grid.major.y = element_blank(),
+        legend.text = element_text(size=12,colour="black"),
+        axis.title.y = element_text(colour="black",size=12),
+        axis.text = element_text(colour="black"),
+        strip.text = element_text(colour="black",angle = 90),
+        axis.line = element_line(colour="black"),
+        axis.ticks = element_line(colour="black"),
+        panel.background = element_rect(fill="white"),
+        plot.background = element_rect(fill="white",colour="white"),
+        strip.background = element_rect(fill="grey90"),
+        legend.background = element_rect(fill="white"),
+        legend.title = element_text(colour="black"))+
+  scale_fill_manual(values=s11)+
+ guides(fill = guide_legend(ncol = 1,direction = "vertical",label.position="right",title = "SARS-CoV-2\nvariant"))+
+  xlab("")+
+  ylab("\nOccurence(%)\n")
+
+
+
+
+
+```
+
+
